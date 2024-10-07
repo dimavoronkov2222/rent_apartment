@@ -17,12 +17,12 @@ try {
         if (isset($_POST['update_profile'])) {
             $new_username = trim($_POST['username']);
             $full_name = trim($_POST['full_name']);
-            $contact = trim($_POST['contact']);
-            $sql = "UPDATE users SET username = :username, full_name = :full_name, contact = :contact WHERE id = :id";
+            $contact_info = trim($_POST['contact_info']);
+            $sql = "UPDATE users SET username = :username, full_name = :full_name, contact_info = :contact_info WHERE id = :id";
             $stmt = $db->prepare($sql);
             $stmt->bindParam(':username', $new_username);
             $stmt->bindParam(':full_name', $full_name);
-            $stmt->bindParam(':contact', $contact);
+            $stmt->bindParam(':contact_info', $contact_info);
             $stmt->bindParam(':id', $user['id']);
             $stmt->execute();
             $_SESSION['username'] = $new_username;
@@ -48,6 +48,7 @@ try {
             $file_tmp = $_FILES['profile_picture']['tmp_name'];
             $file_name = basename($_FILES['profile_picture']['name']);
             $file_path = "uploads/" . $file_name;
+
             if (move_uploaded_file($file_tmp, $file_path)) {
                 $sql = "UPDATE users SET profile_picture = :profile_picture WHERE id = :id";
                 $stmt = $db->prepare($sql);
@@ -92,8 +93,8 @@ try {
             <input type="text" id="full_name" name="full_name" class="form-control" value="<?php echo htmlspecialchars($user['full_name'] ?? ''); ?>" required>
         </div>
         <div class="form-group">
-            <label for="contact">Contact Information:</label>
-            <input type="text" id="contact" name="contact" class="form-control" value="<?php echo htmlspecialchars($user['contact'] ?? ''); ?>" required>
+            <label for="contact_info">Contact Information:</label>
+            <input type="text" id="contact_info" name="contact_info" class="form-control" value="<?php echo htmlspecialchars($user['contact_info'] ?? ''); ?>" required>
         </div>
         <div class="form-group">
             <label for="profile_picture">Profile Picture:</label>
