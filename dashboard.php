@@ -12,22 +12,34 @@ if (isset($_GET['logout'])) {
 try {
     $db = new PDO('sqlite:base.sqlite');
     $db->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+    $result = $db->query("PRAGMA table_info(rentals)")->fetchAll(PDO::FETCH_ASSOC);
+    $columnExists = false;
+    foreach ($result as $column) {
+        if ($column['name'] === 'image') {
+            $columnExists = true;
+            break;
+        }
+    }
 } catch (PDOException $e) {
-    $error = "Database connection error: " . $e->getMessage();
+    die("Database connection error: " . $e->getMessage());
 }
-if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['title'], $_POST['description'], $_POST['price'], $_POST['currency'], $_POST['contact'])) {
+if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['title'], $_POST['description'], $_POST['price'], $_POST['currency'])) {
     $title = trim($_POST['title']);
     $description = trim($_POST['description']);
     $price = trim($_POST['price']);
     $currency = trim($_POST['currency']);
-    $contact = trim($_POST['contact']);
-    $sql = "INSERT INTO rentals (title, description, price, currency, contact) VALUES (:title, :description, :price, :currency, :contact)";
+    $image = null;
+    if (isset($_FILES['image']) && $_FILES['image']['error'] == UPLOAD_ERR_OK) {
+        $image = 'uploads/' . basename($_FILES['image']['name']);
+        move_uploaded_file($_FILES['image']['tmp_name'], $image);
+    }
+    $sql = "INSERT INTO rentals (title, description, price, currency, image) VALUES (:title, :description, :price, :currency, :image)";
     $stmt = $db->prepare($sql);
     $stmt->bindParam(':title', $title);
     $stmt->bindParam(':description', $description);
     $stmt->bindParam(':price', $price);
     $stmt->bindParam(':currency', $currency);
-    $stmt->bindParam(':contact', $contact);
+    $stmt->bindParam(':image', $image);
     try {
         $stmt->execute();
         $success = "Rental property added successfully!";
@@ -51,6 +63,11 @@ $sql = "SELECT * FROM rentals";
 $stmt = $db->prepare($sql);
 $stmt->execute();
 $rentals = $stmt->fetchAll(PDO::FETCH_ASSOC);
+$sql = "SELECT * FROM users WHERE username = :username";
+$stmt = $db->prepare($sql);
+$stmt->bindParam(':username', $_SESSION['username']);
+$stmt->execute();
+$user = $stmt->fetch(PDO::FETCH_ASSOC);
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -64,15 +81,6 @@ $rentals = $stmt->fetchAll(PDO::FETCH_ASSOC);
             width: 80%;
             margin: auto;
             text-align: center;
-        }
-        .logout-button {
-            margin-top: 20px;
-            padding: 10px 15px;
-            background-color: #f44336;
-            color: white;
-            border: none;
-            border-radius: 5px;
-            cursor: pointer;
         }
         .error {
             color: red;
@@ -89,7 +97,6 @@ $rentals = $stmt->fetchAll(PDO::FETCH_ASSOC);
     <?php if (isset($error)): ?>
         <div class="alert alert-danger"><?php echo $error; ?></div>
     <?php endif; ?>
-
     <?php if (isset($success)): ?>
         <div class="alert alert-success"><?php echo $success; ?></div>
     <?php endif; ?>
@@ -100,13 +107,18 @@ $rentals = $stmt->fetchAll(PDO::FETCH_ASSOC);
                 <strong><?php echo htmlspecialchars($rental['title']); ?></strong>
                 <p><?php echo htmlspecialchars($rental['description']); ?></p>
                 <p>Price: <?php echo htmlspecialchars($rental['price']) . ' ' . htmlspecialchars($rental['currency']); ?></p>
-                <p>Contact: <?php echo htmlspecialchars($rental['contact']); ?></p>
+                <?php if ($rental['image']): ?>
+                    <img src="<?php echo htmlspecialchars($rental['image']); ?>" alt="Rental Image" style="width: 100px; height: auto;">
+                <?php endif; ?>
                 <a href="?delete=<?php echo $rental['id']; ?>" class="btn btn-danger btn-sm">Delete</a>
             </li>
         <?php endforeach; ?>
     </ul>
     <button type="button" class="btn btn-primary" data-toggle="modal" data-target="#addRentalModal">
         Add Rental Property
+    </button>
+    <button type="button" class="btn btn-secondary" data-toggle="modal" data-target="#editProfileModal">
+        Edit Profile
     </button>
     <div class="modal fade" id="addRentalModal" tabindex="-1" role="dialog" aria-labelledby="addRentalModalLabel" aria-hidden="true">
         <div class="modal-dialog" role="document">
@@ -117,7 +129,7 @@ $rentals = $stmt->fetchAll(PDO::FETCH_ASSOC);
                         <span aria-hidden="true">&times;</span>
                     </button>
                 </div>
-                <form action="dashboard.php" method="post">
+                <form action="dashboard.php" method="post" enctype="multipart/form-data">
                     <div class="modal-body">
                         <div class="form-group">
                             <label for="title">Title:</label>
@@ -139,8 +151,8 @@ $rentals = $stmt->fetchAll(PDO::FETCH_ASSOC);
                             </select>
                         </div>
                         <div class="form-group">
-                            <label for="contact">Contact Information:</label>
-                            <input type="text" id="contact" name="contact" class="form-control" required>
+                            <label for="image">Image:</label>
+                            <input type="file" id="image" name="image" class="form-control" accept="image/*">
                         </div>
                     </div>
                     <div class="modal-footer">
@@ -151,7 +163,39 @@ $rentals = $stmt->fetchAll(PDO::FETCH_ASSOC);
             </div>
         </div>
     </div>
-    <a href="?logout=true" class="logout-button">Logout</a>
+    <div class="modal fade" id="editProfileModal" tabindex="-1" role="dialog" aria-labelledby="editProfileModalLabel" aria-hidden="true">
+        <div class="modal-dialog" role="document">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="editProfileModalLabel">Edit Profile</h5>
+                    <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                        <span aria-hidden="true">&times;</span>
+                    </button>
+                </div>
+                <form action="profile.php" method="post">
+                    <div class="modal-body">
+                        <div class="form-group">
+                            <label for="username">Username:</label>
+                            <input type="text" id="username" name="username" class="form-control" value="<?php echo htmlspecialchars($user['username'] ?? ''); ?>" required>
+                        </div>
+                        <div class="form-group">
+                            <label for="fullname">Full Name:</label>
+                            <input type="text" id="fullname" name="fullname" class="form-control" value="<?php echo htmlspecialchars($user['fullname'] ?? ''); ?>" required>
+                        </div>
+                        <div class="form-group">
+                            <label for="password">Password:</label>
+                            <input type="password" id="password" name="password" class="form-control" placeholder="Leave blank to keep current password">
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-dismiss="modal">Close</button>
+                        <button type="submit" class="btn btn-primary">Update Profile</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+    <a href="?logout=true" class="btn btn-danger">Logout</a>
 </div>
 <script src="https://code.jquery.com/jquery-3.5.1.slim.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@popperjs/core@2.5.3/dist/umd/popper.min.js"></script>
